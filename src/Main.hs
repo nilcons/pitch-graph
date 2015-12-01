@@ -1,29 +1,20 @@
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
+
 module Main (main) where
 
-import           Control.Monad (forever)
-import           Control.Monad.IO.Class (liftIO)
-import qualified Data.ByteString as BS
-import Data.ByteString.Builder (toLazyByteString, doubleLE)
-import qualified Data.ByteString.Lazy as BL
-import           DywaPitchTrack
-import           Sound.Pulse.Simple
-import           System.IO
+import           Control.Concurrent (forkIO)
+import qualified Graphics.UI.Gtk as Gtk
+import           System.Posix.Signals
 
-f2d :: Float -> Double
-f2d = realToFrac
-
-calcPitch :: [Float] -> PitchTrack Double
-calcPitch fs = computePitch ds
-  where
-    ds = BL.toStrict $ toLazyByteString $ foldMap (doubleLE . f2d) fs
+import           PitchGraph.Chart
+import           PitchGraph.Sound
 
 main :: IO ()
 main = do
-  pulse <- simpleNew Nothing "pitch-graph" Record Nothing "Pitch Graph"
-           (SampleSpec (F32 LittleEndian) 44100 1) Nothing Nothing
-  runPitchTrack 2048 $ forever $ do
-    s <- liftIO $ simpleRead pulse 2048
-    pitch <- calcPitch s
-    liftIO $ do putStr $ "\r\ESC[K" ++ show pitch
-                hFlush stdout
-  simpleFree pulse
+  Gtk.unsafeInitGUIForThreadedRTS
+  (_, pitchCall) <- setupChartWindow 640 480
+  -- Does 'pulse-simple' need a bound thread?
+  forkIO $ pulseMain pitchCall
+  -- Properly handle Ctrl-C:
+  installHandler sigINT (Catch $ Gtk.postGUIAsync $ Gtk.mainQuit) Nothing
+  Gtk.mainGUI

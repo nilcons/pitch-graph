@@ -1,5 +1,6 @@
 *~
 /dist
+/.stack-work
 cabal-dev
 *.o
 *.hi
