@@ -15,31 +15,25 @@ import           Graphics.Rendering.Chart as Ch
 import qualified Graphics.Rendering.Chart.Backend.Cairo as Ch
 import qualified Graphics.UI.Gtk as Gtk
 import qualified Graphics.UI.Gtk.Gdk.Events as GE
-import           System.IO.Unsafe
 
 type PitchUpdateCall = [Double] -> IO ()
 
--- TODO(klao): move inside
-pausedVar :: TVar Bool
-pausedVar = unsafePerformIO $ newTVarIO False
-{-# NOINLINE pausedVar #-}
-
-mainHandleKeys :: Gtk.Window -> GE.Event -> IO Bool
-mainHandleKeys window (GE.Key {GE.eventKeyName=key})
+mainHandleKeys :: Gtk.Window -> TVar Bool -> GE.Event -> IO Bool
+mainHandleKeys window pausedVar (GE.Key {GE.eventKeyName=key})
   | key `elem` ["q", "Q", "Escape"] = Gtk.widgetDestroy window >> return True
   | key == "space"                  = togglePaws >> return True
   | otherwise                       = return True -- traceShow ("key: " <> key) return True
   where
     togglePaws = atomically $ do p <- readTVar pausedVar
                                  writeTVar pausedVar (not p)
-mainHandleKeys _ _ = return False
+mainHandleKeys _ _ _ = return False
 
-setupChartWindow :: Int -> Int -> IO (Gtk.Window, PitchUpdateCall)
-setupChartWindow windowWidth windowHeight = do
+setupChartWindow :: Int -> Int -> TVar Bool -> IO (Gtk.Window, PitchUpdateCall)
+setupChartWindow windowWidth windowHeight pausedVar = do
     window <- Gtk.windowNew
     (canvas, updCall) <- createChartCanvas
     Gtk.widgetSetSizeRequest window windowWidth windowHeight
-    _ <- Gtk.onKeyPress window $ mainHandleKeys window
+    _ <- Gtk.onKeyPress window $ mainHandleKeys window pausedVar
     Gtk.set window [Gtk.containerChild Gtk.:= canvas]
     _ <- Gtk.onDestroy window Gtk.mainQuit
     Gtk.widgetShowAll window
@@ -85,7 +79,7 @@ soundName :: Double -> String
 soundName semitone = sound ++ octave
   where
     st = round semitone :: Int
-    octave = show $ st `div` 12 + 4
+    octave = show $ st `div` 12 + 3
     sound = case st `mod` 12 of
       0  -> "C"
       1  -> "C#"
@@ -144,7 +138,7 @@ lowLevelChartCanvas layoutf = do
     -- deepEvalLayout newLayout
     atomically $ writeTMVar cachedRenderable $ toRenderable newLayout
     Gtk.postGUIAsync $ Gtk.widgetQueueDraw canvas
-    threadDelay 70000
+    threadDelay 45000
 
   _ <- Gtk.onExposeRect canvas $
        \_rect -> do
